@@ -3,3 +3,11 @@
 docs/
 RiftBuddy_Idea.md
 
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+riftbuddy-backend/.venv/
+riftbuddy-backend/data/cache/
