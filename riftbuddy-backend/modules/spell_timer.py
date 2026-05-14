@@ -15,7 +15,10 @@ BASE_COOLDOWNS: dict[str, int] = {
 
 
 class SpellTimer:
+    """Tracks manually triggered enemy summoner spell cooldowns."""
+
     def __init__(self, event_bus: EventBus, game_state: GameState) -> None:
+        """Connect spell timing to the event bus and shared game state."""
         self._bus = event_bus
         self._state = game_state
 
@@ -26,6 +29,7 @@ class SpellTimer:
         triggered_at: float,
         ability_haste: int = 0,
     ) -> None:
+        """Start a cooldown timer for a clicked spell icon."""
         if spell not in BASE_COOLDOWNS:
             raise ValueError(f"Unknown spell: {spell}")
 
@@ -42,6 +46,7 @@ class SpellTimer:
         )
 
     def remaining_seconds(self, champion: str, spell: str, now: float) -> float:
+        """Return how many seconds remain before a spell is available."""
         spells = self._state.get_spells()
         available_at = spells.get(champion, {}).get(spell, {}).get("available_at", 0.0)
         return max(0.0, available_at - now)
