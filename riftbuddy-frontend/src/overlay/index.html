@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RiftBuddy Overlay</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="overlay-shell" aria-label="RiftBuddy overlay">
+      <section class="status-strip" aria-live="polite">
+        <span class="brand">RiftBuddy</span>
+        <span id="connectionStatus" class="status-dot">connecting</span>
+        <button id="clickModeButton" class="mode-button" type="button">
+          click mode
+        </button>
+      </section>
+
+      <section class="mia-panel" aria-label="Missing enemy tracker">
+        <div class="panel-title">MIA</div>
+        <div id="miaList" class="mia-list"></div>
+      </section>
+
+      <section class="spell-panel" aria-label="Enemy summoner spell timers">
+        <div class="panel-title">Spells</div>
+        <div id="spellGrid" class="spell-grid"></div>
+      </section>
+
+      <section
+        id="minimapDebugPanel"
+        class="minimap-debug-panel"
+        aria-label="Minimap debug"
+        hidden
+      >
+        <div class="panel-title">Minimap Debug</div>
+        <div id="debugRegion" class="debug-line"></div>
+        <div id="debugFrame" class="debug-line"></div>
+        <img id="debugPreview" class="debug-preview" alt="Latest minimap crop" hidden />
+        <div id="debugScores" class="debug-scores"></div>
+        <div class="calibration-controls" aria-label="Minimap region controls">
+          <button type="button" data-region-key="top" data-region-value="-5">
+            ^
+          </button>
+          <button type="button" data-region-key="top" data-region-value="5">
+            v
+          </button>
+          <button type="button" data-region-key="left" data-region-value="-5">
+            &lt;
+          </button>
+          <button type="button" data-region-key="left" data-region-value="5">
+            &gt;
+          </button>
+          <button type="button" data-region-key="width" data-region-value="-5">
+            w-
+          </button>
+          <button type="button" data-region-key="width" data-region-value="5">
+            w+
+          </button>
+          <button type="button" data-region-key="height" data-region-value="-5">
+            h-
+          </button>
+          <button type="button" data-region-key="height" data-region-value="5">
+            h+
+          </button>
+        </div>
+      </section>
+
+      <div id="calibrationBox" class="calibration-box" hidden></div>
+    </main>
+
+    <script src="../ws-client.js"></script>
+    <script src="./state.js"></script>
+    <script src="./overlay.js"></script>
+  </body>
+</html>

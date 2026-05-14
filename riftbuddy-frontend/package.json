@@ -1,0 +1,15 @@
+{
+  "name": "riftbuddy-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron overlay UI for RiftBuddy MVP",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/window-options.js && node --check src/ws-client.js && node --check src/overlay/overlay.js && node --check src/overlay/state.js",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "electron": "^42.0.1"
+  }
+}
