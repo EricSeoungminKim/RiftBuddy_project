@@ -1,0 +1,7 @@
+[
+  { "champion": "Garen", "spells": ["Flash", "Teleport"] },
+  { "champion": "Twitch", "spells": ["Flash", "Heal"] },
+  { "champion": "Lee Sin", "spells": ["Flash", "Smite"] },
+  { "champion": "Karma", "spells": ["Flash", "Ignite"] },
+  { "champion": "Vayne", "spells": ["Flash", "Heal"] }
+]

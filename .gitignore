@@ -11,3 +11,12 @@ __pycache__/
 .venv/
 riftbuddy-backend/.venv/
 riftbuddy-backend/data/cache/
+riftbuddy-backend/data/debug/
+riftbuddy-backend/data/curation/
+riftbuddy-backend/data/training_sessions/
+riftbuddy-backend/config/test_enemy_loadout.json
+
+# Node
+node_modules/
+riftbuddy-frontend/node_modules/
+npm-debug.log*
