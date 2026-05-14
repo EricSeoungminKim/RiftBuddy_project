@@ -1,0 +1,9 @@
+{
+  "Jhin_Galio_Nasus_revealed.png": {
+    "champions": [
+      { "champion": "Jhin", "center": [67, 53], "size": 42 },
+      { "champion": "Galio", "center": [161, 189], "size": 42 },
+      { "champion": "Nasus", "center": [294, 286], "size": 42 }
+    ]
+  }
+}
