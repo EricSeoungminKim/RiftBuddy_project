@@ -18,6 +18,14 @@ def test_build_payload_formats_state_update() -> None:
     server, _, state = make_server()
     state.update_mia("Zed", last_seen=1000.0)
     state.update_spell("Jinx", "Flash", available_at=1305.0)
+    state.update_enemy_loadout([{"champion": "Jinx", "spells": ["Flash", "Heal"]}])
+    state.update_minimap_debug(
+        {
+            "enabled": True,
+            "region": {"top": 790, "left": 1630, "width": 290, "height": 290},
+            "champions": [],
+        }
+    )
 
     with patch("core.ws_server.time.time", return_value=1015.0):
         payload = json.loads(server._build_payload())
@@ -26,6 +34,13 @@ def test_build_payload_formats_state_update() -> None:
         "type": "state_update",
         "mia": [{"champion": "Zed", "elapsed_sec": 15.0}],
         "spells": [{"champion": "Jinx", "spell": "Flash", "remaining_sec": 290.0}],
+        "enemy_loadout": [{"champion": "Jinx", "spells": ["Flash", "Heal"]}],
+        "minimap_debug": {
+            "enabled": True,
+            "region": {"top": 790, "left": 1630, "width": 290, "height": 290},
+            "champions": [],
+        },
+        "game_status": {"phase": "test_mode", "message": ""},
     }
 
 
@@ -37,6 +52,19 @@ async def test_handle_spell_clicked_emits_event() -> None:
 
     await server._handle_message(
         {"type": "spell_clicked", "champion": "Jinx", "spell": "Flash"}
+    )
+
+    assert received == [{"champion": "Jinx", "spell": "Flash"}]
+
+
+@pytest.mark.asyncio
+async def test_handle_spell_cleared_emits_event() -> None:
+    server, bus, _ = make_server()
+    received = []
+    bus.subscribe("spell_cleared", received.append)
+
+    await server._handle_message(
+        {"type": "spell_cleared", "champion": "Jinx", "spell": "Flash"}
     )
 
     assert received == [{"champion": "Jinx", "spell": "Flash"}]
@@ -64,4 +92,11 @@ async def test_send_snapshot_sends_payload() -> None:
 
     await server._send_snapshot(FakeWebSocket())
 
-    assert json.loads(sent[0]) == {"type": "state_update", "mia": [], "spells": []}
+    assert json.loads(sent[0]) == {
+        "type": "state_update",
+        "mia": [],
+        "spells": [],
+        "enemy_loadout": [],
+        "minimap_debug": {},
+        "game_status": {"phase": "test_mode", "message": ""},
+    }
