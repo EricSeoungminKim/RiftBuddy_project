@@ -103,6 +103,14 @@ async def test_load_match_assets_downloads_each_champion(tmp_path: Path) -> None
     session = FakeSession(
         [
             FakeResponse(json_data=["14.14.1"]),
+            FakeResponse(
+                json_data={
+                    "data": {
+                        "Zed": {"id": "Zed", "name": "Zed"},
+                        "Jinx": {"id": "Jinx", "name": "Jinx"},
+                    }
+                }
+            ),
             FakeResponse(body=b"zed"),
             FakeResponse(body=b"jinx"),
         ]
@@ -114,3 +122,75 @@ async def test_load_match_assets_downloads_each_champion(tmp_path: Path) -> None
 
     assert paths["Zed"].read_bytes() == b"zed"
     assert paths["Jinx"].read_bytes() == b"jinx"
+
+
+@pytest.mark.asyncio
+async def test_load_match_assets_resolves_live_client_display_names(
+    tmp_path: Path,
+) -> None:
+    session = FakeSession(
+        [
+            FakeResponse(json_data=["14.14.1"]),
+            FakeResponse(
+                json_data={
+                    "data": {
+                        "LeeSin": {"id": "LeeSin", "name": "Lee Sin"},
+                        "MonkeyKing": {"id": "MonkeyKing", "name": "Wukong"},
+                    }
+                }
+            ),
+            FakeResponse(body=b"lee"),
+            FakeResponse(body=b"wukong"),
+        ]
+    )
+    loader = AssetLoader(cache_dir=tmp_path)
+
+    with patch("modules.asset_loader.aiohttp.ClientSession", return_value=session):
+        paths = await loader.load_match_assets(["Lee Sin", "Wukong"])
+
+    assert paths["Lee Sin"].read_bytes() == b"lee"
+    assert paths["Wukong"].read_bytes() == b"wukong"
+    assert session.urls[-2:] == [
+        "https://ddragon.leagueoflegends.com/cdn/14.14.1/img/champion/LeeSin.png",
+        "https://ddragon.leagueoflegends.com/cdn/14.14.1/img/champion/MonkeyKing.png",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_load_match_assets_resolves_korean_live_client_names(
+    tmp_path: Path,
+) -> None:
+    session = FakeSession(
+        [
+            FakeResponse(json_data=["14.14.1"]),
+            FakeResponse(
+                json_data={
+                    "data": {
+                        "Jhin": {"id": "Jhin", "name": "Jhin"},
+                        "Graves": {"id": "Graves", "name": "Graves"},
+                    }
+                }
+            ),
+            FakeResponse(
+                json_data={
+                    "data": {
+                        "Jhin": {"id": "Jhin", "name": "진"},
+                        "Graves": {"id": "Graves", "name": "그레이브즈"},
+                    }
+                }
+            ),
+            FakeResponse(body=b"jhin"),
+            FakeResponse(body=b"graves"),
+        ]
+    )
+    loader = AssetLoader(cache_dir=tmp_path)
+
+    with patch("modules.asset_loader.aiohttp.ClientSession", return_value=session):
+        paths = await loader.load_match_assets(["진", "그레이브즈"])
+
+    assert paths["진"].read_bytes() == b"jhin"
+    assert paths["그레이브즈"].read_bytes() == b"graves"
+    assert session.urls[-2:] == [
+        "https://ddragon.leagueoflegends.com/cdn/14.14.1/img/champion/Jhin.png",
+        "https://ddragon.leagueoflegends.com/cdn/14.14.1/img/champion/Graves.png",
+    ]
