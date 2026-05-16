@@ -85,6 +85,54 @@ def export_accepted_candidates(
     return exported_count
 
 
+def prune_unaccepted_samples(
+    review_path: Path,
+    samples_dir: Path,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Delete raw sample files that are not accepted in a review document."""
+    review = json.loads(review_path.read_text(encoding="utf-8"))
+    kept = _accepted_source_paths(review, samples_dir)
+    deleted = 0
+
+    for path in _review_source_paths(review, samples_dir):
+        if path in kept or not path.exists():
+            continue
+        deleted += 1
+        if not dry_run:
+            path.unlink()
+
+    return {"kept": len(kept), "deleted": deleted}
+
+
+def _accepted_source_paths(review: dict[str, Any], samples_dir: Path) -> set[Path]:
+    accepted: set[Path] = set()
+    for sample in review.get("samples", []):
+        if not _accepted_candidates(sample):
+            continue
+        for path in _sample_source_paths(sample, samples_dir):
+            accepted.add(path)
+    return accepted
+
+
+def _review_source_paths(review: dict[str, Any], samples_dir: Path) -> list[Path]:
+    paths: list[Path] = []
+    for sample in review.get("samples", []):
+        paths.extend(_sample_source_paths(sample, samples_dir))
+    return paths
+
+
+def _sample_source_paths(sample: object, samples_dir: Path) -> list[Path]:
+    if not isinstance(sample, dict):
+        return []
+    paths = []
+    for key in ("source_image", "source_metadata"):
+        value = sample.get(key)
+        if isinstance(value, str) and value:
+            paths.append(samples_dir / value)
+    return paths
+
+
 def _review_sample(
     samples_dir: Path,
     metadata_path: Path,

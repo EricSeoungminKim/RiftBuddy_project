@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from modules.minimap_curation import (  # noqa: E402
     DEFAULT_MIN_CONFIDENCE,
     export_accepted_candidates,
+    prune_unaccepted_samples,
     write_candidate_review,
 )
 
@@ -42,6 +43,23 @@ def parse_args() -> argparse.Namespace:
     export.add_argument("--image-dir", type=Path, default=DEFAULT_IMAGE_DIR)
     export.add_argument("--labels", type=Path, default=DEFAULT_LABELS_PATH)
 
+    prune = subparsers.add_parser(
+        "prune",
+        help="Delete raw sample files that were not accepted in a review JSON",
+    )
+    prune.add_argument("--review", type=Path, default=DEFAULT_REVIEW_PATH)
+    prune.add_argument("--samples", type=Path, default=DEFAULT_SAMPLES_DIR)
+    prune.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report how many files would be deleted without deleting them",
+    )
+    prune.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm deletion. Required unless --dry-run is used.",
+    )
+
     return parser.parse_args()
 
 
@@ -65,6 +83,18 @@ def main() -> None:
             labels_path=args.labels,
         )
         print(f"Exported {count} accepted candidate(s) to {args.labels}")
+        return
+
+    if args.command == "prune":
+        if not args.dry_run and not args.yes:
+            raise SystemExit("Refusing to delete without --yes. Use --dry-run first.")
+        result = prune_unaccepted_samples(
+            review_path=args.review,
+            samples_dir=args.samples,
+            dry_run=args.dry_run,
+        )
+        action = "Would delete" if args.dry_run else "Deleted"
+        print(f"{action} {result['deleted']} raw file(s); kept {result['kept']}.")
 
 
 if __name__ == "__main__":

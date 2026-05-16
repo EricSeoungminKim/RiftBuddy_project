@@ -19,6 +19,7 @@ from modules.minimap_region_detector import crop_region, detect_minimap_region
 from modules.minimap_tracker import MinimapTracker
 from modules.minimap_training import extract_templates_from_labels
 from modules.minimap_training_recorder import TrainingSampleRecorder
+from modules.template_bank import count_templates, load_templates_for_match
 from modules.spell_timer import SpellTimer
 from settings import SETTINGS, BackendSettings
 
@@ -316,13 +317,30 @@ async def run_active_minimap_session(
     game_champions = [str(item["champion"]) for item in enemy_loadout]
     print(f"Loading champion assets for: {game_champions}")
     icon_paths = await components.asset_loader.load_match_assets(game_champions)
-    components.minimap_tracker.load_templates(icon_paths)
+
+    # Combine DDragon icons with curated minimap crops from auto_selected/.
+    # Cap per-champion templates so matchTemplate cost stays within the
+    # scan_interval budget; over-cap pools get sub-sampled for diversity.
+    curated_dir = Path(settings.minimap_curated_crops_dir)
+    templates = load_templates_for_match(
+        icon_paths,
+        curated_dir,
+        max_per_champion=settings.minimap_max_templates_per_champion,
+    )
+    components.minimap_tracker.load_template_images(templates)
+    curated_extra = count_templates(templates) - len(icon_paths)
+    if curated_extra > 0:
+        print(
+            f"Loaded {curated_extra} curated crop template(s) from {curated_dir}."
+        )
+
+    # Legacy labels.json fallback (kept so old fixtures still work).
     learned_count = load_learned_minimap_templates(
         components.minimap_tracker,
         settings,
     )
     if learned_count:
-        print(f"Loaded {learned_count} learned minimap icon template(s).")
+        print(f"Loaded {learned_count} legacy labels.json template(s).")
 
     training_recorder = create_training_recorder(components.runtime_config)
     if training_recorder is not None:

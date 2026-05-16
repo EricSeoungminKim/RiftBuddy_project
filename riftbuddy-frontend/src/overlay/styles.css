@@ -128,7 +128,7 @@ button {
 
 .spell-panel {
   right: 24px;
-  bottom: 480px;
+  bottom: 580px;
   width: 360px;
   padding: 12px;
   border-radius: 8px;
@@ -296,7 +296,7 @@ button {
 
 .debug-score-row {
   display: grid;
-  grid-template-columns: 1fr 64px;
+  grid-template-columns: 1fr 56px 64px;
   align-items: center;
   min-height: 24px;
   padding: 0 8px;
@@ -312,6 +312,12 @@ button {
 .debug-score-row strong {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.debug-score-state {
+  font-size: 10px;
+  font-weight: 780;
+  text-transform: uppercase;
 }
 
 .calibration-controls {

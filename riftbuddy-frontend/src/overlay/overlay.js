@@ -192,6 +192,7 @@ function renderDebugPanel(debug) {
     row.dataset.detected = String(item.detected === true);
     row.innerHTML = `
       <span>${item.champion}</span>
+      <span class="debug-score-state">${item.detected === true ? "seen" : "search"}</span>
       <strong>${formatConfidence(item.confidence)}</strong>
     `;
     debugScores.append(row);
@@ -242,6 +243,27 @@ async function initializeClickMode() {
   });
 }
 
+function initializeSpellHotkeys() {
+  if (!window.riftBuddyOverlay) {
+    return;
+  }
+
+  window.riftBuddyOverlay.onSpellHotkey((binding) => {
+    const action = resolveSpellHotkeyAction(currentState, binding);
+    if (!action) {
+      return;
+    }
+
+    const sent =
+      action.type === "spell_cleared"
+        ? wsClient.sendSpellCleared(action.champion, action.spell)
+        : wsClient.sendSpellClicked(action.champion, action.spell);
+    if (!sent) {
+      renderConnectionStatus("offline");
+    }
+  });
+}
+
 function renderClickMode(isClickThrough) {
   clickModeButton.dataset.clickThrough = String(isClickThrough);
   clickModeButton.textContent = isClickThrough ? "pass-through" : "click mode";
@@ -250,6 +272,7 @@ function renderClickMode(isClickThrough) {
 function initialize() {
   renderState({ mia: [], spells: [] });
   initializeClickMode();
+  initializeSpellHotkeys();
   initializeCalibrationControls();
 
   wsClient = new window.RiftBuddyWsClient({

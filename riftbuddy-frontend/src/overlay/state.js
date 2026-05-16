@@ -21,7 +21,7 @@ function normalizeState(payload) {
     gameStatus,
     mia: Array.isArray(payload.mia) ? payload.mia : [],
     minimapDebug: normalizeMinimapDebug(payload.minimap_debug),
-    spells: Array.isArray(payload.spells) ? payload.spells : [],
+    spells: normalizeSpells(payload.spells),
   };
 }
 
@@ -125,6 +125,19 @@ function normalizeFrameSize(frameSize) {
   return { width, height };
 }
 
+function normalizeSpells(spells) {
+  if (!Array.isArray(spells)) {
+    return [];
+  }
+
+  return spells.filter((item) => {
+    if (!item || typeof item !== "object") {
+      return false;
+    }
+    return Number(item.remaining_sec) > 0;
+  });
+}
+
 function captureRegionToCssRegion(region, captureDisplay, viewport) {
   if (!region || !captureDisplay || !viewport) {
     return region;
@@ -166,5 +179,6 @@ if (typeof module !== "undefined") {
     normalizeEnemyLoadout,
     normalizeGameStatus,
     normalizeState,
+    normalizeSpells,
   };
 }

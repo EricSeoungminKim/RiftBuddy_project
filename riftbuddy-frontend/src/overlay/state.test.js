@@ -108,6 +108,20 @@ test("findSpellState returns matching champion spell timer", () => {
   });
 });
 
+test("normalizeState drops expired spell timers", () => {
+  const state = normalizeState({
+    spells: [
+      { champion: "Jinx", spell: "Flash", remaining_sec: 0 },
+      { champion: "Jinx", spell: "Heal", remaining_sec: 12 },
+    ],
+  });
+
+  assert.deepEqual(state.spells, [
+    { champion: "Jinx", spell: "Heal", remaining_sec: 12 },
+  ]);
+  assert.equal(findSpellState(state, "Jinx", "Flash"), undefined);
+});
+
 test("formatSeconds renders short and minute timers", () => {
   assert.equal(formatSeconds(12.2), "13s");
   assert.equal(formatSeconds(125), "2:05");

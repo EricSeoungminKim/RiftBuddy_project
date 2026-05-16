@@ -9,8 +9,11 @@ import numpy as np
 from core.event_bus import EventBus
 from core.game_state import GameState
 
-MATCH_THRESHOLD = 0.75
-ICON_SIZE_RATIOS = (0.065, 0.08, 0.095, 0.11, 0.125, 0.14)
+MATCH_THRESHOLD = 0.75       # legacy single threshold (debug snapshot field)
+DETECT_THRESHOLD = 0.65      # confidence required to FIRST detect a champion
+LOSE_THRESHOLD = 0.50        # confidence required to KEEP a champion seen
+MIA_GRACE_SECONDS = 3.0
+ICON_SIZE_RATIOS = (0.08, 0.095, 0.11)  # ≈ 36 / 42 / 49 px on a 446px minimap
 MIN_ICON_SIZE = 24
 MAX_ICON_SIZE = 72
 
@@ -33,6 +36,8 @@ class MinimapTracker:
         self._bus = event_bus
         self._state = game_state
         self._templates: dict[str, list[np.ndarray]] = {}
+        self._last_seen_at: dict[str, float] = {}
+        self._tracked_champions: set[str] = set()
 
     def load_templates(self, icon_paths: dict[str, Path]) -> None:
         """Load champion icon image files as OpenCV templates."""
@@ -58,6 +63,7 @@ class MinimapTracker:
         debug_frame_path: str | None = None,
     ) -> dict[str, Any]:
         """Process one minimap frame and update MIA state for tracked champions."""
+        self._reset_seen_state_if_match_changed(tracked_champions)
         mask = self._apply_color_prefilter(frame)
         masked = cv2.bitwise_and(frame, frame, mask=mask)
         detections = self._detect_icons(masked, tracked_champions)
@@ -65,10 +71,11 @@ class MinimapTracker:
         detected_names = {detection.champion for detection in detections}
 
         for champion in tracked_champions:
-            if champion in detected_names:
+            if self._champion_is_visible(champion, detected_names, scores):
+                self._last_seen_at[champion] = now
                 self._state.clear_mia(champion)
                 continue
-            self._mark_mia(champion, now)
+            self._mark_mia_if_seen(champion, now)
 
         frame_metadata = _frame_metadata(
             frame=frame,
@@ -89,14 +96,55 @@ class MinimapTracker:
             )
         return frame_metadata
 
-    def _mark_mia(self, champion: str, now: float) -> None:
-        """Mark a champion missing and emit elapsed missing time."""
+    def _reset_seen_state_if_match_changed(self, tracked_champions: list[str]) -> None:
+        """Clear per-match sightings when the tracked champion set changes."""
+        current = set(tracked_champions)
+        if current == self._tracked_champions:
+            return
+
+        self._tracked_champions = current
+        self._last_seen_at.clear()
+
+    def _champion_is_visible(
+        self,
+        champion: str,
+        detected_names: set[str],
+        scores: dict[str, "Detection | None"],
+    ) -> bool:
+        """Apply hysteresis: a fresh detection requires DETECT_THRESHOLD,
+        but a previously-seen champion only needs LOSE_THRESHOLD to remain
+        seen. This prevents flicker around 0.65 when the icon is partly
+        occluded.
+        """
+        if champion in detected_names:
+            return True
+        if champion not in self._last_seen_at:
+            return False
+        score = scores.get(champion)
+        if score is None:
+            return False
+        return score.confidence >= LOSE_THRESHOLD
+
+    def _mark_mia_if_seen(self, champion: str, now: float) -> None:
+        """Mark a previously seen champion missing and emit elapsed missing time."""
         mia = self._state.get_mia()
-        last_seen = mia.get(champion, {}).get("last_seen", now)
+        if champion not in mia and champion not in self._last_seen_at:
+            return
+
+        last_seen = float(
+            mia.get(champion, {}).get(
+                "last_seen",
+                self._last_seen_at.get(champion, now),
+            )
+        )
+        elapsed = now - last_seen
+        if champion not in mia and elapsed < MIA_GRACE_SECONDS:
+            return
+
         self._state.update_mia(champion, last_seen=last_seen)
         self._bus.emit(
             "mia_detected",
-            {"champion": champion, "elapsed_sec": now - last_seen},
+            {"champion": champion, "elapsed_sec": elapsed},
         )
 
     def _apply_color_prefilter(self, frame: np.ndarray) -> np.ndarray:
@@ -115,7 +163,7 @@ class MinimapTracker:
         detections: list[Detection] = []
         scores = self._score_icons(frame, champions)
         for detection in scores.values():
-            if detection is not None and detection.confidence >= MATCH_THRESHOLD:
+            if detection is not None and detection.confidence >= DETECT_THRESHOLD:
                 detections.append(detection)
         return detections
 
@@ -240,7 +288,7 @@ def _frame_metadata(
         "frame_size": {"width": width, "height": height},
         "capture_path": None,
         "capture_preview": "",
-        "threshold": MATCH_THRESHOLD,
+        "threshold": DETECT_THRESHOLD,
         "updated_at": now,
         "tracked_champions": list(tracked_champions),
         "champions": [
@@ -278,7 +326,7 @@ def _debug_champion(champion: str, detection: Detection | None) -> dict[str, Any
     return {
         "champion": champion,
         "confidence": confidence,
-        "detected": confidence >= MATCH_THRESHOLD,
+        "detected": confidence >= DETECT_THRESHOLD,
         "x": detection.x,
         "y": detection.y,
     }

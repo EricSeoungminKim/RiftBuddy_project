@@ -6,6 +6,7 @@ const {
   screen,
 } = require("electron");
 const path = require("path");
+const { SPELL_HOTKEY_BINDINGS, spellHotkeyEventName } = require("./hotkeys");
 const { buildOverlayWindowOptions } = require("./window-options");
 
 const TOGGLE_CLICK_THROUGH_SHORTCUT = "CommandOrControl+Shift+X";
@@ -73,6 +74,7 @@ function getDisplayMetrics() {
 app.whenReady().then(() => {
   createOverlayWindow();
   globalShortcut.register(TOGGLE_CLICK_THROUGH_SHORTCUT, toggleClickThrough);
+  registerSpellHotkeys();
 
   ipcMain.handle("overlay:get-click-through", () => isClickThrough);
   ipcMain.handle("overlay:set-click-through", (_event, enabled) => {
@@ -91,6 +93,20 @@ app.whenReady().then(() => {
 
   setInterval(pinOverlayWindow, 1000);
 });
+
+function registerSpellHotkeys() {
+  SPELL_HOTKEY_BINDINGS.forEach((binding) => {
+    const registered = globalShortcut.register(binding.accelerator, () => {
+      if (!overlayWindow) {
+        return;
+      }
+      overlayWindow.webContents.send(spellHotkeyEventName(), binding);
+    });
+    if (!registered) {
+      console.warn(`Failed to register hotkey: ${binding.accelerator}`);
+    }
+  });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

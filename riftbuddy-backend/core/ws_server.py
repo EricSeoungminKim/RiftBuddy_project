@@ -98,15 +98,19 @@ class WsServer:
             }
             for champion, data in snapshot["mia"].items()
         ]
-        spells = [
-            {
-                "champion": champion,
-                "spell": spell,
-                "remaining_sec": round(max(0.0, data["available_at"] - now), 1),
-            }
-            for champion, champion_spells in snapshot["spells"].items()
-            for spell, data in champion_spells.items()
-        ]
+        spells = []
+        for champion, champion_spells in snapshot["spells"].items():
+            for spell, data in champion_spells.items():
+                remaining_sec = data["available_at"] - now
+                if remaining_sec <= 0:
+                    continue
+                spells.append(
+                    {
+                        "champion": champion,
+                        "spell": spell,
+                        "remaining_sec": round(remaining_sec, 1),
+                    }
+                )
         return json.dumps(
             {
                 "type": "state_update",

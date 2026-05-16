@@ -44,6 +44,8 @@ class BackendSettings:
     minimap_training_capture_mode: bool = False
     minimap_training_capture_dir: str = "data/training_sessions"
     minimap_training_capture_interval_seconds: float = 3.0
+    minimap_curated_crops_dir: str = "data/curation/auto_selected"
+    minimap_max_templates_per_champion: int = 10
 
 
 SETTINGS = BackendSettings(

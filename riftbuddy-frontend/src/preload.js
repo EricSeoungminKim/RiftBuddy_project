@@ -15,4 +15,7 @@ contextBridge.exposeInMainWorld("riftBuddyOverlay", {
       callback(metrics),
     );
   },
+  onSpellHotkey: (callback) => {
+    ipcRenderer.on("spell-hotkey", (_event, binding) => callback(binding));
+  },
 });

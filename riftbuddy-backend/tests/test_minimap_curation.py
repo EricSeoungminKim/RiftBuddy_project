@@ -7,6 +7,7 @@ import numpy as np
 from modules.minimap_curation import (
     build_candidate_review,
     export_accepted_candidates,
+    prune_unaccepted_samples,
 )
 
 
@@ -117,6 +118,74 @@ def test_export_accepted_candidates_to_training_labels(tmp_path: Path) -> None:
     assert labels["curated/session-a__frame_000001.png"] == {
         "champions": [{"champion": "Nasus", "center": [22, 24], "size": 24}]
     }
+
+
+def test_prune_unaccepted_samples_keeps_accepted_sources(tmp_path: Path) -> None:
+    samples_dir = tmp_path / "sessions"
+    session_dir = samples_dir / "session-a"
+    session_dir.mkdir(parents=True)
+    accepted_image = session_dir / "frame_000001.png"
+    rejected_image = session_dir / "frame_000002.png"
+    _write_image(accepted_image)
+    _write_json(accepted_image.with_suffix(".json"), {"image": accepted_image.name})
+    _write_image(rejected_image)
+    _write_json(rejected_image.with_suffix(".json"), {"image": rejected_image.name})
+    review_path = tmp_path / "review.json"
+    _write_json(
+        review_path,
+        {
+            "version": 1,
+            "samples": [
+                {
+                    "source_image": "session-a/frame_000001.png",
+                    "source_metadata": "session-a/frame_000001.json",
+                    "candidates": [{"accepted": True}],
+                },
+                {
+                    "source_image": "session-a/frame_000002.png",
+                    "source_metadata": "session-a/frame_000002.json",
+                    "candidates": [{"accepted": False}],
+                },
+            ],
+        },
+    )
+
+    result = prune_unaccepted_samples(review_path, samples_dir)
+
+    assert result == {"kept": 2, "deleted": 2}
+    assert accepted_image.exists()
+    assert accepted_image.with_suffix(".json").exists()
+    assert not rejected_image.exists()
+    assert not rejected_image.with_suffix(".json").exists()
+
+
+def test_prune_unaccepted_samples_dry_run_reports_without_deleting(tmp_path: Path) -> None:
+    samples_dir = tmp_path / "sessions"
+    session_dir = samples_dir / "session-a"
+    session_dir.mkdir(parents=True)
+    rejected_image = session_dir / "frame_000002.png"
+    _write_image(rejected_image)
+    _write_json(rejected_image.with_suffix(".json"), {"image": rejected_image.name})
+    review_path = tmp_path / "review.json"
+    _write_json(
+        review_path,
+        {
+            "version": 1,
+            "samples": [
+                {
+                    "source_image": "session-a/frame_000002.png",
+                    "source_metadata": "session-a/frame_000002.json",
+                    "candidates": [{"accepted": False}],
+                }
+            ],
+        },
+    )
+
+    result = prune_unaccepted_samples(review_path, samples_dir, dry_run=True)
+
+    assert result == {"kept": 0, "deleted": 2}
+    assert rejected_image.exists()
+    assert rejected_image.with_suffix(".json").exists()
 
 
 def _write_image(path: Path) -> None:

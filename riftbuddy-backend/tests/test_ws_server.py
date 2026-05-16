@@ -44,6 +44,19 @@ def test_build_payload_formats_state_update() -> None:
     }
 
 
+def test_build_payload_omits_expired_spell_timers() -> None:
+    server, _, state = make_server()
+    state.update_spell("Jinx", "Flash", available_at=1015.0)
+    state.update_spell("Jinx", "Heal", available_at=1015.1)
+
+    with patch("core.ws_server.time.time", return_value=1015.0):
+        payload = json.loads(server._build_payload())
+
+    assert payload["spells"] == [
+        {"champion": "Jinx", "spell": "Heal", "remaining_sec": 0.1}
+    ]
+
+
 @pytest.mark.asyncio
 async def test_handle_spell_clicked_emits_event() -> None:
     server, bus, _ = make_server()

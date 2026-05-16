@@ -5,7 +5,12 @@ import numpy as np
 
 from core.event_bus import EventBus
 from core.game_state import GameState
-from modules.minimap_tracker import Detection, MinimapTracker
+from modules.minimap_tracker import (
+    DETECT_THRESHOLD,
+    LOSE_THRESHOLD,
+    Detection,
+    MinimapTracker,
+)
 
 
 def make_tracker() -> tuple[MinimapTracker, EventBus, GameState]:
@@ -34,6 +39,82 @@ def test_no_detection_emits_mia() -> None:
     tracker.process_frame(fake_frame, tracked_champions=["Zed"], now=1015.0)
 
     assert received == [{"champion": "Zed", "elapsed_sec": 15.0}]
+
+
+def test_unseen_champion_is_not_marked_mia() -> None:
+    tracker, bus, state = make_tracker()
+    received = []
+    bus.subscribe("mia_detected", received.append)
+
+    fake_frame = np.zeros((200, 200, 3), dtype=np.uint8)
+    tracker.process_frame(fake_frame, tracked_champions=["Zed"], now=1015.0)
+
+    assert state.get_mia() == {}
+    assert received == []
+
+
+def test_seen_champion_becomes_mia_from_last_seen_time() -> None:
+    tracker, bus, state = make_tracker()
+    received = []
+    bus.subscribe("mia_detected", received.append)
+    fake_frame = np.zeros((200, 200, 3), dtype=np.uint8)
+
+    with patch.object(
+        tracker,
+        "_detect_icons",
+        return_value=[Detection(champion="Zed", confidence=0.9, x=5, y=5)],
+    ):
+        tracker.process_frame(fake_frame, tracked_champions=["Zed"], now=1000.0)
+
+    tracker.process_frame(fake_frame, tracked_champions=["Zed"], now=1015.0)
+
+    assert state.get_mia() == {"Zed": {"last_seen": 1000.0}}
+    assert received == [{"champion": "Zed", "elapsed_sec": 15.0}]
+
+
+def test_seen_champion_is_not_mia_before_grace_period() -> None:
+    tracker, bus, state = make_tracker()
+    received = []
+    bus.subscribe("mia_detected", received.append)
+    fake_frame = np.zeros((200, 200, 3), dtype=np.uint8)
+
+    with patch.object(
+        tracker,
+        "_detect_icons",
+        return_value=[Detection(champion="Zed", confidence=0.9, x=5, y=5)],
+    ):
+        tracker.process_frame(fake_frame, tracked_champions=["Zed"], now=1000.0)
+
+    tracker.process_frame(fake_frame, tracked_champions=["Zed"], now=1002.9)
+
+    assert state.get_mia() == {}
+    assert received == []
+
+
+def test_seen_champion_reappearing_within_grace_is_not_mia() -> None:
+    tracker, bus, state = make_tracker()
+    received = []
+    bus.subscribe("mia_detected", received.append)
+    fake_frame = np.zeros((200, 200, 3), dtype=np.uint8)
+
+    with patch.object(
+        tracker,
+        "_detect_icons",
+        return_value=[Detection(champion="Zed", confidence=0.9, x=5, y=5)],
+    ):
+        tracker.process_frame(fake_frame, tracked_champions=["Zed"], now=1000.0)
+
+    tracker.process_frame(fake_frame, tracked_champions=["Zed"], now=1002.0)
+
+    with patch.object(
+        tracker,
+        "_detect_icons",
+        return_value=[Detection(champion="Zed", confidence=0.9, x=6, y=6)],
+    ):
+        tracker.process_frame(fake_frame, tracked_champions=["Zed"], now=1002.5)
+
+    assert state.get_mia() == {}
+    assert received == []
 
 
 def test_detection_clears_mia() -> None:
@@ -120,7 +201,7 @@ def test_debug_mode_records_confidence_snapshot() -> None:
         "frame_size": {"width": 30, "height": 20},
         "capture_path": None,
         "capture_preview": "data:image/jpeg;base64,",
-        "threshold": 0.75,
+        "threshold": DETECT_THRESHOLD,
         "updated_at": 1015.0,
         "champions": [
             {
@@ -151,3 +232,107 @@ def test_apply_color_prefilter_returns_mask() -> None:
     assert mask.shape == (200, 200)
     assert mask.dtype == np.uint8
     assert mask[55, 55] > 0
+
+
+# ---------- hysteresis (DETECT_THRESHOLD / LOSE_THRESHOLD) ----------
+
+
+def _score_only(champion: str, confidence: float) -> dict[str, Detection | None]:
+    return {champion: Detection(champion=champion, confidence=confidence, x=5, y=5)}
+
+
+def test_threshold_constants_form_hysteresis_band() -> None:
+    """Detect threshold must be strictly higher than lose threshold."""
+    assert DETECT_THRESHOLD > LOSE_THRESHOLD
+    # Sanity-check the recommended range so a future tweak doesn't silently
+    # collapse the band.
+    assert 0.5 <= LOSE_THRESHOLD < DETECT_THRESHOLD <= 0.9
+
+
+def test_below_detect_threshold_not_yet_seen_stays_unseen() -> None:
+    tracker, bus, state = make_tracker()
+    received = []
+    bus.subscribe("mia_detected", received.append)
+    fake = np.zeros((200, 200, 3), dtype=np.uint8)
+
+    with patch.object(
+        tracker, "_score_icons", return_value=_score_only("Zed", DETECT_THRESHOLD - 0.05)
+    ):
+        tracker.process_frame(fake, tracked_champions=["Zed"], now=1000.0)
+
+    assert state.get_mia() == {}
+    assert received == []  # never seen, so no MIA grace either
+
+
+def test_at_or_above_detect_threshold_marks_seen() -> None:
+    tracker, _bus, state = make_tracker()
+    fake = np.zeros((200, 200, 3), dtype=np.uint8)
+
+    with patch.object(
+        tracker, "_score_icons", return_value=_score_only("Zed", DETECT_THRESHOLD)
+    ):
+        tracker.process_frame(fake, tracked_champions=["Zed"], now=1000.0)
+
+    assert state.get_mia() == {}
+
+
+def test_seen_champion_stays_seen_in_hysteresis_band() -> None:
+    """Once seen, a confidence between LOSE and DETECT must not flip to MIA."""
+    tracker, bus, state = make_tracker()
+    received = []
+    bus.subscribe("mia_detected", received.append)
+    fake = np.zeros((200, 200, 3), dtype=np.uint8)
+
+    band_value = (DETECT_THRESHOLD + LOSE_THRESHOLD) / 2
+
+    with patch.object(
+        tracker, "_score_icons", return_value=_score_only("Zed", DETECT_THRESHOLD + 0.1)
+    ):
+        tracker.process_frame(fake, tracked_champions=["Zed"], now=1000.0)
+    with patch.object(
+        tracker, "_score_icons", return_value=_score_only("Zed", band_value)
+    ):
+        # Even after the grace window elapses, in-band score keeps it seen.
+        tracker.process_frame(fake, tracked_champions=["Zed"], now=1010.0)
+
+    assert state.get_mia() == {}
+    assert received == []
+
+
+def test_seen_champion_falls_below_lose_then_becomes_mia_after_grace() -> None:
+    tracker, bus, state = make_tracker()
+    received = []
+    bus.subscribe("mia_detected", received.append)
+    fake = np.zeros((200, 200, 3), dtype=np.uint8)
+
+    with patch.object(
+        tracker, "_score_icons", return_value=_score_only("Zed", DETECT_THRESHOLD + 0.1)
+    ):
+        tracker.process_frame(fake, tracked_champions=["Zed"], now=1000.0)
+    with patch.object(
+        tracker, "_score_icons", return_value=_score_only("Zed", LOSE_THRESHOLD - 0.05)
+    ):
+        # Below LOSE, but within grace — no MIA yet.
+        tracker.process_frame(fake, tracked_champions=["Zed"], now=1001.0)
+        assert received == []
+        # After grace.
+        tracker.process_frame(fake, tracked_champions=["Zed"], now=1010.0)
+
+    assert "Zed" in state.get_mia()
+    assert received and received[-1]["champion"] == "Zed"
+
+
+def test_in_band_alone_never_creates_first_detection() -> None:
+    """An in-band score before the champion has ever been seen must not
+    create a phantom detection. Hysteresis only kicks in *after* a real
+    high-confidence sighting."""
+    tracker, _bus, state = make_tracker()
+    fake = np.zeros((200, 200, 3), dtype=np.uint8)
+    band_value = (DETECT_THRESHOLD + LOSE_THRESHOLD) / 2
+
+    with patch.object(
+        tracker, "_score_icons", return_value=_score_only("Zed", band_value)
+    ):
+        tracker.process_frame(fake, tracked_champions=["Zed"], now=1000.0)
+
+    assert state.get_mia() == {}
